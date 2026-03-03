@@ -1,0 +1,39 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - echo "Installing backend dependencies"
+      - pip install -r requirements.txt
+
+  pre_build:
+    commands:
+      - echo "Running test suite"
+      - python -m pytest tests/ -v --tb=short
+      - echo "All tests passed"
+
+  build:
+    commands:
+      - echo "Packaging backend for CodeDeploy"
+      - cd infra/lambda_decay
+      - pip install -r requirements.txt -t ./package
+      - cp lambda_handler.py ./package/
+      - cd package
+      - zip -r ../../../lambda-decay.zip .
+      - cd ../../..
+      - aws lambda update-function-code --function-name sandstone-decay-${ENVIRONMENT} --zip-file fileb://lambda-decay.zip --region ${AWS_DEFAULT_REGION} || echo "Lambda update skipped"
+
+  post_build:
+    commands:
+      - echo "Backend build complete"
+
+artifacts:
+  files:
+    - "**/*"
+  exclude-paths:
+    - "frontend/**"
+    - "lambda-decay.zip"
+    - "__pycache__/**"
+    - "*.pyc"
