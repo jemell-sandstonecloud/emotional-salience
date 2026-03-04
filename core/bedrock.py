@@ -175,12 +175,15 @@ def invoke_model(model_id, system_prompt, messages, max_tokens=1000):
         # boto3 not available — fall back to direct Anthropic SDK
         return _fallback_anthropic(system_prompt, messages, max_tokens)
 
-    except Exception as e:
+     except Exception as e:
+        return f"[BEDROCK ERROR: {str(e)}]"
+
+#    except Exception as e:
         # Bedrock call failed — try direct Anthropic as fallback
-        try:
-            return _fallback_anthropic(system_prompt, messages, max_tokens)
-        except Exception:
-            return f"[MOCK RESPONSE — no LLM available] Model: {model_id}, Context: {system_prompt[:200]}..."
+#        try:
+#            return _fallback_anthropic(system_prompt, messages, max_tokens)
+#        except Exception:
+#            return f"[MOCK RESPONSE — no LLM available] Model: {model_id}, Context: {system_prompt[:200]}..."
 
 
 def _fallback_anthropic(system_prompt, messages, max_tokens):
