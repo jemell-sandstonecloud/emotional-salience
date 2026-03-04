@@ -3,7 +3,7 @@
  * All calls go through the Vite proxy → Flask backend.
  */
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 let _token = null;
 
