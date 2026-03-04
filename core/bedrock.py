@@ -7,8 +7,6 @@ Routes LLM calls through Amazon Bedrock. Handles multiple model families:
 - Mistral (mistral.*)
 - Amazon Titan (amazon.*)
 - Cohere Command (cohere.*)
-
-Falls back to direct Anthropic SDK if Bedrock unavailable.
 """
 
 import os
@@ -32,7 +30,7 @@ def detect_model_family(model_id):
     elif model_id.startswith('cohere.'):
         return 'cohere'
     else:
-        return 'anthropic'  # Default assumption
+        return 'anthropic'
 
 
 def _format_anthropic_body(system_prompt, messages, max_tokens):
@@ -47,14 +45,12 @@ def _format_anthropic_body(system_prompt, messages, max_tokens):
 
 def _format_meta_body(system_prompt, messages, max_tokens):
     """Format request body for Meta Llama models via Bedrock."""
-    # Llama uses a single prompt string with role markers
     prompt_parts = [f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"]
     for msg in messages:
         role = msg['role']
         content = msg['content']
         prompt_parts.append(f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}<|eot_id|>")
     prompt_parts.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
-    
     return {
         'prompt': ''.join(prompt_parts),
         'max_gen_len': max_tokens,
@@ -64,7 +60,6 @@ def _format_meta_body(system_prompt, messages, max_tokens):
 
 def _format_mistral_body(system_prompt, messages, max_tokens):
     """Format request body for Mistral models via Bedrock."""
-    # Prepend system message
     all_messages = [{'role': 'system', 'content': system_prompt}] + messages
     return {
         'messages': all_messages,
@@ -75,7 +70,6 @@ def _format_mistral_body(system_prompt, messages, max_tokens):
 
 def _format_titan_body(system_prompt, messages, max_tokens):
     """Format request body for Amazon Titan models via Bedrock."""
-    # Titan uses inputText with system context prepended
     user_messages = [m['content'] for m in messages if m['role'] == 'user']
     input_text = f"System: {system_prompt}\n\nUser: {user_messages[-1] if user_messages else ''}"
     return {
@@ -95,7 +89,6 @@ def _format_cohere_body(system_prompt, messages, max_tokens):
     for msg in messages[:-1]:
         role = 'USER' if msg['role'] == 'user' else 'CHATBOT'
         chat_history.append({'role': role, 'message': msg['content']})
-    
     return {
         'message': user_messages[-1] if user_messages else '',
         'chat_history': chat_history,
@@ -131,23 +124,21 @@ def _extract_response_text(response_body, family):
 def invoke_model(model_id, system_prompt, messages, max_tokens=1000):
     """
     Main entry point — invoke a Bedrock model.
-    
+
     Args:
-        model_id: Bedrock model ID (e.g. 'us.anthropic.claude-sonnet-4-5-v1')
+        model_id: Bedrock model ID (e.g. 'anthropic.claude-3-haiku-20240307-v1:0')
         system_prompt: System prompt string
         messages: List of {'role': 'user'|'assistant', 'content': '...'}
         max_tokens: Max response tokens
-    
+
     Returns:
         Plain text response string.
-        Falls back to direct Anthropic SDK if Bedrock unavailable.
     """
     if model_id is None:
         model_id = config.BEDROCK_DEFAULT_MODEL
 
     family = detect_model_family(model_id)
 
-    # Format body for the model family
     formatters = {
         'anthropic': _format_anthropic_body,
         'meta': _format_meta_body,
@@ -158,7 +149,6 @@ def invoke_model(model_id, system_prompt, messages, max_tokens=1000):
     formatter = formatters.get(family, _format_anthropic_body)
     body = formatter(system_prompt, messages, max_tokens)
 
-    # Try Bedrock
     try:
         import boto3
         client = boto3.client('bedrock-runtime', region_name=config.BEDROCK_REGION)
@@ -172,33 +162,7 @@ def invoke_model(model_id, system_prompt, messages, max_tokens=1000):
         return _extract_response_text(response_body, family)
 
     except ImportError:
-        # boto3 not available — fall back to direct Anthropic SDK
-        return _fallback_anthropic(system_prompt, messages, max_tokens)
+        return "[BEDROCK ERROR: boto3 not available]"
 
-     except Exception as e:
-        return f"[BEDROCK ERROR: {str(e)}]"
-
-#    except Exception as e:
-        # Bedrock call failed — try direct Anthropic as fallback
-#        try:
-#            return _fallback_anthropic(system_prompt, messages, max_tokens)
-#        except Exception:
-#            return f"[MOCK RESPONSE — no LLM available] Model: {model_id}, Context: {system_prompt[:200]}..."
-
-
-def _fallback_anthropic(system_prompt, messages, max_tokens):
-    """Fall back to direct Anthropic SDK."""
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        response = client.messages.create(
-            model=config.CLAUDE_MODEL,
-            max_tokens=max_tokens,
-            system=system_prompt,
-            messages=messages
-        )
-        return response.content[0].text
-    except ImportError:
-        return f"[MOCK RESPONSE — anthropic SDK not installed] Context: {system_prompt[:200]}..."
     except Exception as e:
-        return f"[API ERROR: {str(e)}] Context: {system_prompt[:200]}..."
+        return f"[BEDROCK ERROR: {str(e)}]"
