@@ -240,6 +240,8 @@ def _verify_password(password, stored_hash):
         return bcrypt.checkpw(password, stored_hash)
     except (ImportError, ValueError):
         # Fallback: SHA-256 comparison for legacy hashes
+        if isinstance(password, bytes):
+            password = password.decode('utf-8')
         return hashlib.sha256(password.encode()).hexdigest() == stored_hash
 
 
