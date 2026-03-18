@@ -7,21 +7,12 @@ import unittest
 # Ensure project root on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Allow testing.postgresql to run as root (required in CodeBuild)
-os.environ['TESTING_POSTGRESQL_ALLOW_ROOT'] = '1'
-
-import testing.postgresql
-
-# Spin up a throwaway Postgres instance for the test run
-_postgresql = testing.postgresql.Postgresql()
-_dsn = _postgresql.dsn()
-
-# Point all DB env vars at the throwaway instance
-os.environ['DB_HOST'] = _dsn['host']
-os.environ['DB_PORT'] = str(_dsn['port'])
-os.environ['DB_NAME'] = _dsn['database']
-os.environ['DB_USER'] = _dsn.get('user', 'postgres')
-os.environ['DB_PASSWORD'] = ''
+# Test database config - overridden by buildspec env vars in CI
+os.environ.setdefault('DB_HOST', os.getenv('TEST_DB_HOST', 'localhost'))
+os.environ.setdefault('DB_PORT', os.getenv('TEST_DB_PORT', '5432'))
+os.environ.setdefault('DB_NAME', os.getenv('TEST_DB_NAME', 'sandstone_test'))
+os.environ.setdefault('DB_USER', os.getenv('TEST_DB_USER', 'sandstone_admin'))
+os.environ.setdefault('DB_PASSWORD', os.getenv('TEST_DB_PASSWORD', ''))
 
 import config
 from db.database import get_connection, reset_connection, init_db
