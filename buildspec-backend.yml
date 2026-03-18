@@ -7,14 +7,12 @@ phases:
     commands:
       - echo "Installing backend dependencies"
       - yum install -y postgresql15-server postgresql15 || amazon-linux-extras install postgresql14 -y
-      - useradd -m testrunner || true
       - pip install -r requirements.txt
 
   pre_build:
     commands:
       - echo "Running test suite"
-      - chown -R testrunner /codebuild/output
-      - su testrunner -c "python -m pytest tests/ -v --tb=short"
+      - python -m pytest tests/ -v --tb=short
       - echo "All tests passed"
 
   build:

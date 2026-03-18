@@ -3,10 +3,14 @@
 import os
 import sys
 import unittest
-import testing.postgresql
 
 # Ensure project root on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Allow testing.postgresql to run as root (required in CodeBuild)
+os.environ['TESTING_POSTGRESQL_ALLOW_ROOT'] = '1'
+
+import testing.postgresql
 
 # Spin up a throwaway Postgres instance for the test run
 _postgresql = testing.postgresql.Postgresql()
