@@ -6,6 +6,7 @@ phases:
       python: 3.12
     commands:
       - echo "Installing backend dependencies"
+      - yum install -y postgresql15-server postgresql15 || amazon-linux-extras install postgresql14 -y
       - pip install -r requirements.txt
 
   pre_build:
