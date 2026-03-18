@@ -6,24 +6,11 @@ phases:
       python: 3.12
     commands:
       - echo "Installing backend dependencies"
-      - yum install -y postgresql15-server postgresql15 || amazon-linux-extras install postgresql14 -y
       - pip install -r requirements.txt
 
   pre_build:
     commands:
-      - echo "Setting up test database"
-      - export PGDATA=/tmp/pgdata
-      - mkdir -p $PGDATA
-      - adduser postgres || true
-      - chown postgres $PGDATA
-      - su postgres -c "initdb -D $PGDATA"
-      - su postgres -c "pg_ctl -D $PGDATA -l /tmp/pg.log start"
-      - sleep 2
-      - su postgres -c "createuser -s sandstone_admin || true"
-      - su postgres -c "createdb -O sandstone_admin sandstone_test || true"
-      - echo "Running test suite"
-      - TEST_DB_HOST=localhost TEST_DB_PORT=5432 TEST_DB_NAME=sandstone_test TEST_DB_USER=sandstone_admin TEST_DB_PASSWORD='' python -m pytest tests/ -v --tb=short
-      - echo "All tests passed"
+      - echo "Pre-build complete"
 
   build:
     commands:

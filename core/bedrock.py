@@ -18,9 +18,16 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
+try:
+    import boto3
+except ImportError:
+    boto3 = None
+
 
 def detect_model_family(model_id):
     """Detect model family from model_id prefix."""
+    if not model_id:
+        return 'anthropic'
     if model_id.startswith('us.anthropic.') or model_id.startswith('anthropic.'):
         return 'anthropic'
     elif model_id.startswith('us.meta.') or model_id.startswith('meta.'):
@@ -32,7 +39,7 @@ def detect_model_family(model_id):
     elif model_id.startswith('cohere.'):
         return 'cohere'
     else:
-        return 'anthropic'  # Default assumption
+        return 'anthropic'
 
 
 def _format_anthropic_body(system_prompt, messages, max_tokens):
@@ -47,14 +54,13 @@ def _format_anthropic_body(system_prompt, messages, max_tokens):
 
 def _format_meta_body(system_prompt, messages, max_tokens):
     """Format request body for Meta Llama models via Bedrock."""
-    # Llama uses a single prompt string with role markers
     prompt_parts = [f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"]
     for msg in messages:
         role = msg['role']
         content = msg['content']
         prompt_parts.append(f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}<|eot_id|>")
     prompt_parts.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
-    
+
     return {
         'prompt': ''.join(prompt_parts),
         'max_gen_len': max_tokens,
@@ -64,7 +70,6 @@ def _format_meta_body(system_prompt, messages, max_tokens):
 
 def _format_mistral_body(system_prompt, messages, max_tokens):
     """Format request body for Mistral models via Bedrock."""
-    # Prepend system message
     all_messages = [{'role': 'system', 'content': system_prompt}] + messages
     return {
         'messages': all_messages,
@@ -75,7 +80,6 @@ def _format_mistral_body(system_prompt, messages, max_tokens):
 
 def _format_titan_body(system_prompt, messages, max_tokens):
     """Format request body for Amazon Titan models via Bedrock."""
-    # Titan uses inputText with system context prepended
     user_messages = [m['content'] for m in messages if m['role'] == 'user']
     input_text = f"System: {system_prompt}\n\nUser: {user_messages[-1] if user_messages else ''}"
     return {
@@ -95,7 +99,7 @@ def _format_cohere_body(system_prompt, messages, max_tokens):
     for msg in messages[:-1]:
         role = 'USER' if msg['role'] == 'user' else 'CHATBOT'
         chat_history.append({'role': role, 'message': msg['content']})
-    
+
     return {
         'message': user_messages[-1] if user_messages else '',
         'chat_history': chat_history,
@@ -131,13 +135,13 @@ def _extract_response_text(response_body, family):
 def invoke_model(model_id, system_prompt, messages, max_tokens=1000):
     """
     Main entry point — invoke a Bedrock model.
-    
+
     Args:
         model_id: Bedrock model ID (e.g. 'us.anthropic.claude-sonnet-4-5-v1')
         system_prompt: System prompt string
         messages: List of {'role': 'user'|'assistant', 'content': '...'}
         max_tokens: Max response tokens
-    
+
     Returns:
         Plain text response string.
         Falls back to direct Anthropic SDK if Bedrock unavailable.
@@ -147,7 +151,6 @@ def invoke_model(model_id, system_prompt, messages, max_tokens=1000):
 
     family = detect_model_family(model_id)
 
-    # Format body for the model family
     formatters = {
         'anthropic': _format_anthropic_body,
         'meta': _format_meta_body,
@@ -158,9 +161,10 @@ def invoke_model(model_id, system_prompt, messages, max_tokens=1000):
     formatter = formatters.get(family, _format_anthropic_body)
     body = formatter(system_prompt, messages, max_tokens)
 
-    # Try Bedrock
+    if boto3 is None:
+        return _fallback_anthropic(system_prompt, messages, max_tokens)
+
     try:
-        import boto3
         client = boto3.client('bedrock-runtime', region_name=config.BEDROCK_REGION)
         response = client.invoke_model(
             modelId=model_id,
@@ -171,12 +175,7 @@ def invoke_model(model_id, system_prompt, messages, max_tokens=1000):
         response_body = json.loads(response['body'].read())
         return _extract_response_text(response_body, family)
 
-    except ImportError:
-        # boto3 not available — fall back to direct Anthropic SDK
-        return _fallback_anthropic(system_prompt, messages, max_tokens)
-
     except Exception as e:
-        # Bedrock call failed — try direct Anthropic as fallback
         try:
             return _fallback_anthropic(system_prompt, messages, max_tokens)
         except Exception:
