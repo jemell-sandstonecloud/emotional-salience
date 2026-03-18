@@ -12,10 +12,10 @@ import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 from core.scoring import score_message, count_emotional_words
-from core.tds import calculate_tds, apply_tds_correction
+from core.lds import calculate_lds, apply_lds_correction
 from db.database import (
     get_node_by_topic, insert_node, update_node,
-    update_tds_score, update_corrected_salience
+    update_lds_score, update_corrected_salience
 )
 
 TOPIC_PRIORITY = [
@@ -91,12 +91,12 @@ def process_message(user_id, message, session_messages=None):
 
         from db.database import get_nodes_by_user
         all_nodes = get_nodes_by_user(user_id)
-        tds = calculate_tds(topic, message, user_id, all_nodes)
-        update_tds_score(node_id, tds)
+        lds = calculate_lds(topic, message, user_id, all_nodes)
+        update_lds_score(node_id, lds)
 
         node = get_node_by_topic(user_id, topic)
         if node:
-            corrected = apply_tds_correction(node['current_salience'], tds)
+            corrected = apply_lds_correction(node['current_salience'], tds)
             update_corrected_salience(node_id, corrected)
 
         affected_node_ids.append(node_id)

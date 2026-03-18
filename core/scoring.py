@@ -1,7 +1,7 @@
 """
 Sandstone Five-Signal Composite Legitimacy Scoring.
 
-Signals: SDV, CSCV, AAHS, SWV, PDV
+Signals: SDV, CSCV, LCS, SWV, PDV
 All bugs from known-issues list are fixed here.
 """
 
@@ -141,7 +141,7 @@ def calculate_cscv(topic, user_id, current_message):
     return min(max(sum(overlaps) / len(overlaps), 0.0), 1.0)
 
 
-def calculate_aahs(message):
+def calculate_lcs(message):
     """
     Affect-Adjacent Hedging Score.
     
@@ -157,9 +157,9 @@ def calculate_aahs(message):
     # Hedging density normalized
     hedge_density = min(hedge_count / max(word_count / 10, 1), 1.0)
 
-    # Inverse: more hedging = lower AAHS (less direct = less affect-salient)
-    aahs = 1.0 - hedge_density
-    return min(max(aahs, 0.0), 1.0)
+    # Inverse: more hedging = lower LCS (less direct = less affect-salient)
+    lcs = 1.0 - hedge_density
+    return min(max(lcs, 0.0), 1.0)
 
 
 def calculate_swv(message):
@@ -211,11 +211,11 @@ def calculate_pdv(topic, session_messages):
     return min(max(pdv, 0.0), 1.0)
 
 
-def calculate_base_score(sdv, cscv, aahs, swv, pdv, weights=None):
+def calculate_base_score(sdv, cscv, lcs, swv, pdv, weights=None):
     """
     Weighted composite of all five signals.
     
-    B = w1(SDV) + w2(CSCV) + w3(AAHS) + w4(SWV) + w5(PDV)
+    B = w1(SDV) + w2(CSCV) + w3(LCS) + w4(SWV) + w5(PDV)
     Weights must sum to 1.0.
     """
     if weights is None:
@@ -228,7 +228,7 @@ def calculate_base_score(sdv, cscv, aahs, swv, pdv, weights=None):
     return (
         weights[0] * sdv +
         weights[1] * cscv +
-        weights[2] * aahs +
+        weights[2] * lcs +
         weights[3] * swv +
         weights[4] * pdv
     )
@@ -238,7 +238,7 @@ def score_message(message, user_id, topic, session_messages=None, session_positi
     """
     Score a message using all five signals plus base_score.
     
-    Returns dict with sdv, cscv, aahs, swv, pdv, base_score.
+    Returns dict with sdv, cscv, lcs, swv, pdv, base_score.
     BUG FIX #7: No .pop() mutation — safe dict extraction.
     """
     if session_messages is None:
@@ -246,16 +246,16 @@ def score_message(message, user_id, topic, session_messages=None, session_positi
 
     sdv = calculate_sdv(message, session_position, total_session_messages)
     cscv = calculate_cscv(topic, user_id, message)
-    aahs = calculate_aahs(message)
+    lcs = calculate_lcs(message)
     swv = calculate_swv(message)
     pdv = calculate_pdv(topic, session_messages)
 
-    base = calculate_base_score(sdv, cscv, aahs, swv, pdv)
+    base = calculate_base_score(sdv, cscv, lcs, swv, pdv)
 
     return {
         'sdv': sdv,
         'cscv': cscv,
-        'aahs': aahs,
+        'lcs': lcs,
         'swv': swv,
         'pdv': pdv,
         'base_score': base,

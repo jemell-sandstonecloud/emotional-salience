@@ -84,7 +84,7 @@ def get_context_summary(user_id):
             'base_score': n['base_score'],
             'current_salience': n['current_salience'],
             'corrected_salience': n['corrected_salience'],
-            'tds_score': n['tds_score'],
+            'lds_score': n['lds_score'],
             'processing_count': n['processing_count'],
             'decay_rate': n['decay_rate'],
             'spike_coefficient': n['spike_coefficient'],

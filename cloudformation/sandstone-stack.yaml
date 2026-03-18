@@ -173,7 +173,7 @@ Resources:
     Properties:
       DBInstanceIdentifier: !Sub sandstone-db-${Environment}
       Engine: postgres
-      EngineVersion: '16.4'
+      EngineVersion: '18.3'
       DBInstanceClass: !Ref DBInstanceClass
       AllocatedStorage: 20
       MaxAllocatedStorage: 100

@@ -15,7 +15,7 @@ import config
 
 
 def parse_timestamp(ts):
-    """Parse timestamp — handles ISO format and SQLite CURRENT_TIMESTAMP."""
+    """Parse timestamp — handles ISO format and PostgreSQL CURRENT_TIMESTAMP."""
     if isinstance(ts, datetime):
         return ts
     for fmt in (
@@ -83,7 +83,7 @@ def run_decay_update():
     Returns count of updated nodes.
     """
     from db.database import get_all_nodes, update_salience, update_decay_rate, update_corrected_salience
-    from core.tds import apply_tds_correction
+    from core.lds import apply_lds_correction
 
     nodes = get_all_nodes()
     updated = 0
@@ -100,7 +100,7 @@ def run_decay_update():
         )
         update_salience(node['id'], new_salience)
 
-        corrected = apply_tds_correction(new_salience, node.get('tds_score', 0.0))
+        corrected = apply_lds_correction(new_salience, node.get('lds_score', 0.0))
         update_corrected_salience(node['id'], corrected)
 
         updated += 1

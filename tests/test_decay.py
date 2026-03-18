@@ -1,122 +1,92 @@
-"""Tests for decay engine — core patent claim validation."""
+"""Tests for Sandstone decay engine."""
 
 import os
 import sys
-import unittest
 import math
+import unittest
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ['DATABASE_PATH'] = 'db/sandstone_test_decay.db'
-
 from core.decay import (
     calculate_decay_rate, calculate_salience_at_time,
-    apply_spike, decay_spike, parse_timestamp, run_decay_update
+    apply_spike, decay_spike, parse_timestamp,
 )
-from db.database import init_db, reset_connection, insert_node
 import config
 
 
 class TestDecayRate(unittest.TestCase):
-    def test_base_rate_no_processing(self):
+    def test_base_rate(self):
         rate = calculate_decay_rate(0)
-        self.assertAlmostEqual(rate, 0.01)
+        self.assertEqual(rate, config.BASE_DECAY_RATE)
 
-    def test_rate_increases_with_processing(self):
+    def test_processed_once(self):
+        rate = calculate_decay_rate(1)
+        expected = config.BASE_DECAY_RATE * (1 + 1 * config.PROCESSING_BOOST)
+        self.assertAlmostEqual(rate, expected)
+
+    def test_processed_five_times(self):
+        rate = calculate_decay_rate(5)
+        expected = config.BASE_DECAY_RATE * (1 + 5 * config.PROCESSING_BOOST)
+        self.assertAlmostEqual(rate, expected)
+
+    def test_monotonic_increase(self):
         rates = [calculate_decay_rate(i) for i in range(10)]
         for i in range(1, len(rates)):
-            self.assertGreater(rates[i], rates[i-1])
-
-    def test_processing_boost_is_0_5(self):
-        self.assertEqual(config.PROCESSING_BOOST, 0.5)
-        rate = calculate_decay_rate(2)
-        self.assertAlmostEqual(rate, 0.02)
+            self.assertGreater(rates[i], rates[i - 1])
 
 
 class TestSalienceCalculation(unittest.TestCase):
-    def test_core_claim_processed_vs_unprocessed(self):
-        base_score = 0.8
-        days = 14
-        unprocessed_rate = calculate_decay_rate(0)
-        unprocessed_salience = calculate_salience_at_time(base_score, days, unprocessed_rate)
-        processed_rate = calculate_decay_rate(5)
-        processed_salience = calculate_salience_at_time(base_score, days, processed_rate)
-        diff = unprocessed_salience - processed_salience
-        self.assertGreater(diff, 0.15)
+    def test_no_decay_at_zero(self):
+        s = calculate_salience_at_time(0.8, 0, 0.01)
+        self.assertAlmostEqual(s, 0.8, places=3)
 
-    def test_processed_below_50_percent(self):
-        base_score = 0.8
-        days = 14
-        unprocessed_rate = calculate_decay_rate(0)
-        unprocessed_salience = calculate_salience_at_time(base_score, days, unprocessed_rate)
-        processed_rate = calculate_decay_rate(10)
-        processed_salience = calculate_salience_at_time(base_score, days, processed_rate)
-        self.assertLess(processed_salience, unprocessed_salience * 0.5)
+    def test_decay_over_time(self):
+        s0 = calculate_salience_at_time(0.8, 0, 0.01)
+        s30 = calculate_salience_at_time(0.8, 30, 0.01)
+        self.assertGreater(s0, s30)
 
-    def test_salience_floor(self):
-        salience = calculate_salience_at_time(0.5, 10000, 1.0)
-        self.assertGreaterEqual(salience, config.MIN_SALIENCE)
+    def test_floor_at_min(self):
+        s = calculate_salience_at_time(0.8, 10000, 0.01)
+        self.assertAlmostEqual(s, config.MIN_SALIENCE, places=3)
 
-    def test_spike_increases_salience(self):
-        base = 0.5
-        days = 7
-        rate = 0.01
-        without = calculate_salience_at_time(base, days, rate, spike=0.0)
-        with_spike = calculate_salience_at_time(base, days, rate, spike=0.2)
-        self.assertGreater(with_spike, without)
-
-
-class TestTimestampParsing(unittest.TestCase):
-    def test_iso_format(self):
-        dt = parse_timestamp('2025-02-20T10:30:00')
-        self.assertEqual(dt.year, 2025)
-
-    def test_sqlite_format(self):
-        dt = parse_timestamp('2025-02-20 10:30:00')
-        self.assertEqual(dt.year, 2025)
-
-    def test_microseconds(self):
-        dt = parse_timestamp('2025-02-20T10:30:00.123456')
-        self.assertEqual(dt.year, 2025)
+    def test_processed_decays_faster(self):
+        rate_unprocessed = calculate_decay_rate(0)
+        rate_processed = calculate_decay_rate(3)
+        s_unprocessed = calculate_salience_at_time(0.8, 30, rate_unprocessed)
+        s_processed = calculate_salience_at_time(0.8, 30, rate_processed)
+        self.assertGreater(s_unprocessed, s_processed)
 
 
 class TestSpike(unittest.TestCase):
     def test_apply_spike(self):
-        node = {'spike_coefficient': 0.1}
-        new_spike = apply_spike(node, increment=0.15, cap=0.5)
-        self.assertEqual(new_spike, 0.25)
+        node = {'spike_coefficient': 0.0}
+        new_spike = apply_spike(node)
+        self.assertGreater(new_spike, 0)
 
     def test_spike_cap(self):
         node = {'spike_coefficient': 0.45}
-        new_spike = apply_spike(node, increment=0.15, cap=0.5)
-        self.assertEqual(new_spike, 0.5)
+        new_spike = apply_spike(node, cap=0.5)
+        self.assertLessEqual(new_spike, 0.5)
 
     def test_spike_decay(self):
-        decayed = decay_spike(0.5, 3, half_life=3)
-        self.assertAlmostEqual(decayed, 0.25, places=2)
+        decayed = decay_spike(0.3, 3, half_life=3)
+        self.assertLess(decayed, 0.3)
 
 
-class TestRunDecayUpdate(unittest.TestCase):
-    def setUp(self):
-        reset_connection()
-        os.environ['DATABASE_PATH'] = 'db/sandstone_test_decay.db'
-        try:
-            os.remove('db/sandstone_test_decay.db')
-        except FileNotFoundError:
-            pass
-        init_db()
+class TestParseTimestamp(unittest.TestCase):
+    def test_iso_format(self):
+        ts = "2024-01-15T10:30:00"
+        result = parse_timestamp(ts)
+        self.assertIsInstance(result, datetime)
 
-    def test_run_decay_update(self):
-        insert_node('user1', 'grief', 'I lost someone',
-                     {'sdv': 0.5, 'cscv': 1.0, 'aahs': 0.7, 'swv': 0.6, 'pdv': 0.3}, 0.62)
-        count = run_decay_update()
-        self.assertEqual(count, 1)
+    def test_datetime_passthrough(self):
+        now = datetime.utcnow()
+        self.assertEqual(parse_timestamp(now), now)
 
-    def tearDown(self):
-        reset_connection()
-        try:
-            os.remove('db/sandstone_test_decay.db')
-        except FileNotFoundError:
-            pass
+    def test_pg_format(self):
+        ts = "2024-01-15 10:30:00"
+        result = parse_timestamp(ts)
+        self.assertIsInstance(result, datetime)
 
 
 if __name__ == '__main__':

@@ -1,23 +1,25 @@
--- Sandstone Memory Schema
+-- Sandstone Memory Schema (PostgreSQL) — v2.1
+-- Variable renames: aahs→lcs, tds_score→lds_score
+
 
 CREATE TABLE IF NOT EXISTS memory_nodes (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     topic TEXT NOT NULL,
     content TEXT NOT NULL,
-    sdv REAL NOT NULL DEFAULT 0.0,
-    cscv REAL NOT NULL DEFAULT 0.0,
-    aahs REAL NOT NULL DEFAULT 0.0,
-    swv REAL NOT NULL DEFAULT 0.0,
-    pdv REAL NOT NULL DEFAULT 0.0,
-    base_score REAL NOT NULL DEFAULT 0.0,
-    current_salience REAL NOT NULL DEFAULT 0.0,
-    tds_score REAL NOT NULL DEFAULT 0.0,
-    corrected_salience REAL NOT NULL DEFAULT 0.0,
+    sdv DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    cscv DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    lcs DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    swv DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    pdv DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    base_score DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    current_salience DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    lds_score DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    corrected_salience DOUBLE PRECISION NOT NULL DEFAULT 0.0,
     processing_count INTEGER DEFAULT 0,
     last_processed TIMESTAMP,
-    decay_rate REAL DEFAULT 0.01,
-    spike_coefficient REAL DEFAULT 0.0,
+    decay_rate DOUBLE PRECISION DEFAULT 0.01,
+    spike_coefficient DOUBLE PRECISION DEFAULT 0.0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -32,15 +34,13 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
     user_id TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES sessions(id)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Study ratings table — captures every exchange rating
 CREATE TABLE IF NOT EXISTS study_ratings (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -62,21 +62,19 @@ CREATE TABLE IF NOT EXISTS study_ratings (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Study participants
 CREATE TABLE IF NOT EXISTS study_participants (
     user_id TEXT PRIMARY KEY,
-    email TEXT,
+    email TEXT UNIQUE,
     display_name TEXT,
     password_hash TEXT,
     sandstone_panel TEXT CHECK(sandstone_panel IN ('A', 'B')),
     consent_given_at TIMESTAMP,
     session_count INTEGER DEFAULT 0,
     total_exchanges INTEGER DEFAULT 0,
-    is_admin BOOLEAN DEFAULT 0,
+    is_admin BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Session history for stateful return visits
 CREATE TABLE IF NOT EXISTS conversation_history (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -94,3 +92,4 @@ CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_ratings_user ON study_ratings(user_id);
 CREATE INDEX IF NOT EXISTS idx_history_user_session ON conversation_history(user_id, session_number);
 CREATE INDEX IF NOT EXISTS idx_history_panel ON conversation_history(user_id, panel);
+CREATE INDEX IF NOT EXISTS idx_participants_email ON study_participants(email);

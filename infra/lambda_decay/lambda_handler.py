@@ -8,7 +8,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def handler(event, context):
     try:
-        os.environ['USE_POSTGRES'] = 'true'
         from core.decay import run_decay_update, archive_cold_nodes
         updated_count = run_decay_update()
         archived_count = archive_cold_nodes()
